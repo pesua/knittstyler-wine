@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# KnittStyler under Wine — portable launcher.
+#
+# The bundle carries the registry settings and helpers, plus the user's own copy of the
+# program in app/KnittStyler (see --import). The Wine prefix is built on first run by
+# whatever Wine the machine has, so the folder can be copied to another computer
+# (other user name, other Wine version) and just started.
+#
+# Usage: knittstyler [file.ksw ...]
+#        knittstyler --import DIR copy an installed KnittStyler folder (C:\KnittStyler) into the bundle
+#        knittstyler --setup      rebuild the Wine prefix (program files are kept)
+#        knittstyler --winecfg    open winecfg for this prefix
+# Settings: config/knittstyler.conf (see knittstyler.conf.example), or environment:
+#   KS_SERIAL=/dev/ttyUSB0   cable device for COM1 (default: first USB serial adapter found)
+#   KS_WINE=/path/to/wine    32-bit capable wine loader
+#   KS_PREFIX=/path          Wine prefix location (default: <bundle>/prefix)
+set -euo pipefail
+
+BUNDLE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+[ -f "$BUNDLE/config/knittstyler.conf" ] && . "$BUNDLE/config/knittstyler.conf"
+
+APP_DIR="$BUNDLE/app/KnittStyler"
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/knittstyler"
+mkdir -p "$LOG_DIR"
+LOG="$LOG_DIR/wine.log"
+
+export WINEPREFIX="${KS_PREFIX:-$BUNDLE/prefix}"
+export WINEARCH=win32
+export WINEDEBUG="${WINEDEBUG:--all}"
+# No .NET in this program (skip the wine-mono prompt); keep Wine from adding menu entries
+# and file associations of its own to the desktop.
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree=;winemenubuilder.exe=d}"
+
+# Messages are shown in Ukrainian on a Ukrainian desktop and in English elsewhere
+# (decided before the launcher switches the locale to Russian for Wine).
+case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in uk*) UI_UK=1 ;; *) UI_UK= ;; esac
+
+msg() {  # msg <error|warning|info> <english text> <ukrainian text>
+  local text="$2"
+  [ -n "$UI_UK" ] && text="$3"
+  printf 'knittstyler: %b\n' "$text" >&2
+  if [ ! -t 2 ] && command -v zenity >/dev/null; then
+    zenity "--$1" --title=KnittStyler --no-wrap --text="$text" 2>/dev/null || true
+  fi
+}
+
+find_wine() {
+  local c
+  for c in ${KS_WINE:-} "$BUNDLE/wine/bin/wine" /usr/bin/wine32 /usr/lib/wine/wine \
+           /opt/wine-stable/bin/wine /usr/bin/wine; do
+    [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return; }
+  done
+  return 1
+}
+
+find_wineserver() {
+  local c
+  for c in "$(dirname "$WINE")/wineserver" /usr/lib/i386-linux-gnu/wine/wineserver \
+           /usr/lib/wine/wineserver32 /usr/lib/wine/wineserver "$(command -v wineserver || true)"; do
+    [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return; }
+  done
+  return 1
+}
+
+# The program is a Russian ANSI Delphi build: Wine must run with code page 1251 and a
+# Russian user locale (decimal comma), which it takes from the Unix locale.
+setup_locale() {
+  local dir
+  locale_ok() { LOCPATH="${1:-}" LC_ALL=ru_RU.UTF-8 bash -c : 2>&1 | grep -q 'cannot change locale' && return 1 || return 0; }
+  if locale_ok ""; then
+    unset LOCPATH
+  else
+    dir="$BUNDLE/locale"
+    if ! locale_ok "$dir"; then
+      dir="${XDG_DATA_HOME:-$HOME/.local/share}/knittstyler/locale"
+      locale_ok "$dir" || { mkdir -p "$dir"; localedef -i ru_RU -f UTF-8 "$dir/ru_RU.UTF-8" 2>>"$LOG" || true; }
+      locale_ok "$dir" || msg warning \
+        "Could not enable the ru_RU.UTF-8 locale: Cyrillic text in the program may be garbled.\nFix: sudo locale-gen ru_RU.UTF-8" \
+        "Не вдалося ввімкнути локаль ru_RU.UTF-8: кирилиця в програмі може бути зіпсована.\nВиправлення: sudo locale-gen ru_RU.UTF-8"
+    fi
+    export LOCPATH="$dir"
+  fi
+  # bash itself would complain here: it does not see LOCPATH, Wine does.
+  { export LANG=ru_RU.UTF-8 LC_ALL=ru_RU.UTF-8; } 2>/dev/null
+}
+
+wine_run() { "$WINE" "$@" >>"$LOG" 2>&1; }
+
+install_gecko() {
+  # Gecko renders the built-in manual (TWebBrowser). Each Wine release wants one exact
+  # version; its name is stored in appwiz.cpl.
+  local f msi=""
+  for f in "$WINEPREFIX/drive_c/windows/system32/appwiz.cpl" \
+           $(find "$(dirname "$(readlink -f "$WINE")")/.." /usr/lib/wine /usr/lib/i386-linux-gnu/wine \
+                  -name appwiz.cpl -path '*i386*' 2>/dev/null); do
+    [ -f "$f" ] || continue
+    # The name is stored as UTF-16; dropping NUL bytes makes it greppable.
+    msi="$( (tr -d '\000' < "$f" | grep -aoE 'wine-gecko-[0-9.]+-x86\.msi' || true) | head -1)"
+    [ -n "$msi" ] && break
+  done
+  [ -n "$msi" ] || { echo "knittstyler: cannot tell which Gecko this Wine needs, skipping" >&2; return; }
+  if [ ! -f "$BUNDLE/redist/$msi" ]; then
+    local ver="${msi#wine-gecko-}"; ver="${ver%-x86.msi}"
+    echo "knittstyler: downloading $msi ..." >&2
+    mkdir -p "$BUNDLE/redist"
+    curl -fsSL -o "$BUNDLE/redist/$msi.part" "https://dl.winehq.org/wine/wine-gecko/$ver/$msi" \
+      && mv "$BUNDLE/redist/$msi.part" "$BUNDLE/redist/$msi" \
+      || { rm -f "$BUNDLE/redist/$msi.part"
+           msg warning "Could not download $msi: the program's built-in manual will not display." \
+                       "Не вдалося отримати $msi: вбудована довідка програми не відображатиметься."
+           return; }
+  fi
+  wine_run msiexec /i "Z:${BUNDLE//\//\\}\\redist\\$msi" /qn
+}
+
+build_prefix() {
+  echo "knittstyler: creating Wine prefix in $WINEPREFIX (one-time, takes a minute)..." >&2
+  wine_run wineboot -i
+  install_gecko
+  cp "$APP_DIR/KnitStyler.ttf" "$WINEPREFIX/drive_c/windows/Fonts/"
+  local reg
+  for reg in "$BUNDLE"/config/*.reg; do
+    wine_run regedit /S "Z:${reg//\//\\}"
+  done
+  "$WINESERVER" -w
+  "$WINE" --version > "$WINEPREFIX/.knittstyler-ready"
+}
+
+link_app() {
+  # Program files and the user's patterns stay in the bundle; C:\KnittStyler points there.
+  local link="$WINEPREFIX/drive_c/KnittStyler"
+  if [ "$(readlink "$link" 2>/dev/null)" != "$APP_DIR" ]; then
+    [ -L "$link" ] || [ ! -e "$link" ] || { msg error "$link exists and is not a link" "$link існує і не є посиланням"; exit 1; }
+    ln -sfn "$APP_DIR" "$link"
+  fi
+}
+
+map_serial() {
+  local dev="${KS_SERIAL:-}" d
+  if [ -z "$dev" ]; then
+    for d in /dev/serial/by-id/* /dev/ttyUSB* /dev/ttyACM*; do
+      [ -e "$d" ] && { dev="$d"; break; }
+    done
+  fi
+  if [ -z "$dev" ]; then
+    echo "knittstyler: no USB serial adapter found, COM1 is not connected" >&2
+    return
+  fi
+  dev="$(readlink -f "$dev")"
+  if [ ! -r "$dev" ] || [ ! -w "$dev" ]; then
+    msg warning \
+      "No access to $dev (knitting machine cable).\nAdd your user to the dialout group and log in again:\n  sudo usermod -aG dialout $USER" \
+      "Немає доступу до $dev (кабель в'язальної машини).\nДодайте користувача до групи dialout і перезайдіть у систему:\n  sudo usermod -aG dialout $USER"
+  fi
+  local state="$WINEPREFIX/.knittstyler-com1"
+  if [ "$(cat "$state" 2>/dev/null)" != "$dev" ]; then
+    # Wine reads port overrides when its services start, so restart them after the change.
+    wine_run reg add 'HKLM\Software\Wine\Ports' /v COM1 /d "$dev" /f
+    "$WINESERVER" -k 2>/dev/null || true
+    "$WINESERVER" -w 2>/dev/null || true
+    echo "$dev" > "$state"
+  fi
+  echo "knittstyler: COM1 -> $dev" >&2
+}
+
+check_printer() {
+  # Without any printer the program reports "There is no default printer currently
+  # selected" at start-up; that box can open under the always-on-top splash screen.
+  # Wine takes printers from CUPS. Warn once per prefix.
+  local flag="$WINEPREFIX/.knittstyler-printer-warned"
+  command -v lpstat >/dev/null || return 0
+  [ -n "$(lpstat -e 2>/dev/null)" ] && return 0
+  [ -f "$flag" ] && return 0
+  msg info \
+    "No printer is set up on this system.\nAfter the splash screen the program reports \"There is no default printer currently selected\":\nclick OK (the box may be hidden under the butterfly splash screen).\n\nTo get rid of the message and print to PDF:\n  sudo apt install printer-driver-cups-pdf" \
+    "У системі немає жодного принтера.\nПісля заставки програма покаже «There is no default printer currently selected»:\nнатисніть OK (вікно може сховатися під заставкою з метеликом).\n\nЩоб прибрати повідомлення й друкувати в PDF:\n  sudo apt install printer-driver-cups-pdf"
+  touch "$flag"
+}
+
+import_app() {
+  local src="${1%/}"
+  [ -f "$src/KnittStyler.exe" ] || { msg error "$src has no KnittStyler.exe" "У $src немає KnittStyler.exe"; exit 1; }
+  [ -e "$APP_DIR" ] && { msg error "$APP_DIR already exists; move it away to import another copy" \
+                                   "$APP_DIR вже існує; приберіть його, щоб імпортувати іншу копію"; exit 1; }
+  mkdir -p "$(dirname "$APP_DIR")"
+  cp -a "$src" "$APP_DIR"
+  echo "knittstyler: program copied to $APP_DIR" >&2
+}
+
+if [ "${1:-}" = "--import" ]; then
+  import_app "${2:?usage: knittstyler --import /path/to/KnittStyler}"
+  exit 0
+fi
+
+if [ ! -f "$APP_DIR/KnittStyler.exe" ]; then
+  msg error \
+    "KnittStyler is not in $APP_DIR.\nCopy the C:\\\\KnittStyler folder of an installed copy:\n  $BUNDLE/knittstyler --import /path/to/KnittStyler" \
+    "Програму KnittStyler не знайдено в $APP_DIR.\nСкопіюйте теку C:\\\\KnittStyler зі встановленої програми:\n  $BUNDLE/knittstyler --import /шлях/до/KnittStyler"
+  exit 1
+fi
+
+WINE="$(find_wine)" || { msg error "Wine not found. Install it: sudo apt install wine wine32:i386" \
+                                   "Wine не знайдено. Встановіть: sudo apt install wine wine32:i386"; exit 1; }
+WINESERVER="$(find_wineserver)" || { msg error "wineserver not found next to $WINE" "wineserver не знайдено поряд з $WINE"; exit 1; }
+export WINELOADER="$WINE"
+setup_locale
+
+case "${1:-}" in
+  --setup)
+    [ -d "$WINEPREFIX" ] && { "$WINESERVER" -k 2>/dev/null || true; rm -rf "$WINEPREFIX"; }
+    build_prefix; link_app; exit 0 ;;
+  --winecfg)
+    exec "$WINE" winecfg ;;
+esac
+
+[ -f "$WINEPREFIX/.knittstyler-ready" ] || build_prefix
+link_app
+map_serial
+check_printer
+
+# Files given on the command line (e.g. opened from the file manager) as Z:\ paths.
+args=()
+for f in "$@"; do
+  f="$(readlink -f "$f")"
+  args+=("Z:${f//\//\\}")
+done
+
+cd "$WINEPREFIX/drive_c/KnittStyler"
+echo "=== $(date '+%F %T') start ${args[*]:-}" >>"$LOG"
+exec "$WINE" 'C:\KnittStyler\KnittStyler.exe' "${args[@]}" >>"$LOG" 2>&1

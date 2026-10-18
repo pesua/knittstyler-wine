@@ -1,0 +1,20 @@
+# Allow-list: everything is ignored unless listed below, so program files and
+# personal data from a KnittStyler installation can never be committed by accident.
+*
+!*/
+
+!/.gitignore
+!/README*.md
+!/LICENSE
+
+!/bundle/knittstyler
+!/bundle/install-desktop.sh
+!/bundle/config/knittstyler.conf.example
+!/bundle/config/knittstyler-defaults.reg
+!/bundle/config/knittstyler-system.reg
+
+!/scripts/*.sh
+!/scripts/*.py
+
+!/notes/*.log
+!/notes/*.md

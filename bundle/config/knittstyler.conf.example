@@ -1,0 +1,11 @@
+# Copy to knittstyler.conf (same folder) and uncomment what you need.
+
+# Cable of the knitting machine. Default: first of /dev/serial/by-id/*, /dev/ttyUSB*, /dev/ttyACM*.
+# A /dev/serial/by-id/... path keeps working when the adapter is plugged into another USB port.
+#KS_SERIAL=/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_XXXXXXXX-if00-port0
+
+# Wine loader to use (must run 32-bit programs), e.g. a portable Wine unpacked into the bundle.
+#KS_WINE=/opt/wine-stable/bin/wine
+
+# Where the Wine prefix lives. Default: <bundle>/prefix
+#KS_PREFIX=$HOME/.local/share/knittstyler/prefix

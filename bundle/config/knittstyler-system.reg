@@ -1,0 +1,5 @@
+Windows Registry Editor Version 5.00
+
+; The program's own symbol font, installed into C:\windows\Fonts by the launcher.
+[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Fonts]
+"KnitStyler Special (TrueType)"="KnitStyler.ttf"

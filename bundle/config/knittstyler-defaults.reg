@@ -1,0 +1,19 @@
+Windows Registry Editor Version 5.00
+
+; Default KnittStyler settings for a fresh Wine prefix. Files in this folder are
+; imported in name order, so a personal knittstyler-user.reg overrides these values.
+
+; Interface language: RUS, ENG or JPN (KnittStyler.RUS / .ENG / .JPN next to the exe).
+[HKEY_CURRENT_USER\Software\Borland\Locales]
+"C:\\KnittStyler\\KnittStyler.exe"="RUS"
+
+[HKEY_CURRENT_USER\Software\TRIAN Solutions\KnittStyler]
+; The launcher connects the machine cable to COM1.
+"ACOMPort"="COM1"
+"Path_Fashion"="C:\\KnittStyler\\Models"
+"Path_Gallery"="C:\\KnittStyler\\Galleries"
+"Path_Garment"="C:\\KnittStyler\\Garments"
+"Path_Palettes"="C:\\KnittStyler\\Palettes"
+"Path_Picture"="C:\\KnittStyler\\Patterns"
+; Bit mask of knitting sounds (all done, colour change, needle count, settings, data sent).
+"SoundEvents"=dword:0000001f
