@@ -1,4 +1,6 @@
-"""Dump registry subtrees from offline hives as JSON lines. Usage: dump-reg.py <hive> <key-path-substring>..."""
+"""Dump registry subtrees from offline hives as JSON lines. Usage: dump-reg.py <hive> <key-path-substring>...
+Requires regipy: pip install regipy
+"""
 import sys, json
 from regipy.registry import RegistryHive
 

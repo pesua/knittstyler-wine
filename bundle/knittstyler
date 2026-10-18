@@ -103,7 +103,7 @@ install_gecko() {
     local ver="${msi#wine-gecko-}"; ver="${ver%-x86.msi}"
     echo "knittstyler: downloading $msi ..." >&2
     mkdir -p "$BUNDLE/redist"
-    curl -fsSL -o "$BUNDLE/redist/$msi.part" "https://dl.winehq.org/wine/wine-gecko/$ver/$msi" \
+    wget -q -O "$BUNDLE/redist/$msi.part" "https://dl.winehq.org/wine/wine-gecko/$ver/$msi" \
       && mv "$BUNDLE/redist/$msi.part" "$BUNDLE/redist/$msi" \
       || { rm -f "$BUNDLE/redist/$msi.part"
            msg warning "Could not download $msi: the program's built-in manual will not display." \

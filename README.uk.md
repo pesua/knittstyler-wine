@@ -22,11 +22,12 @@
 
 ## Що потрібно
 
-- Ubuntu або Debian, x86-64, з Wine, що запускає 32-бітні програми:
+- Ubuntu або Debian, x86-64, з Wine, що запускає 32-бітні програми, а також `git`, щоб отримати скрипти, і `wget`, щоб при першому запуску завантажити wine-gecko:
   ```
   sudo dpkg --add-architecture i386 && sudo apt update
-  sudo apt install wine wine32:i386
+  sudo apt install wine wine32:i386 git wget
   ```
+  Бібліотеки для звуку й USB Wine встановлює сам. Рекомендовані пакети apt треба лишити (так за замовчуванням): `libcups2:i386`, без якого Wine не бачить принтерів, приходить лише як рекомендація `wine32`.
 - Доступ користувача до послідовних портів (після цього перезайти в систему):
   ```
   sudo usermod -aG dialout $USER
@@ -35,7 +36,13 @@
   ```
   sudo apt purge brltty modemmanager
   ```
-- За бажанням: `printer-driver-cups-pdf` (PDF-принтер, див. [Відомі особливості](#відомі-особливості)) і `icoutils` (іконка програми в меню).
+- Необов'язкові, без них нічого не ламається:
+  - `printer-driver-cups-pdf`: PDF-принтер (див. [Відомі особливості](#відомі-особливості));
+  - `zenity`: вікна з повідомленнями, коли KnittStyler запускають з меню (є в Ubuntu з GNOME);
+  - `cups-client`: дає скрипту попередити, що принтер не налаштований;
+  - `icoutils` і `desktop-file-utils`: іконка програми й оновлення меню для `install-desktop.sh`;
+  - `fonts-noto-cjk`: лише для японського інтерфейсу.
+- Тільки для допоміжних скриптів: `scripts/extract-from-vm.sh` потрібні `virtualbox` і `ntfs-3g`; `scripts/hive-to-reg.py` потрібен `regipy` (`pip install regipy`).
 
 ## Встановлення
 

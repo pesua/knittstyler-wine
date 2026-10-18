@@ -1,5 +1,9 @@
 """Export registry subtrees from an offline hive to a .reg file (REGEDIT5, UTF-16LE).
 Usage: hive-to-reg.py <hive> <root-name e.g. HKEY_CURRENT_USER> <out.reg> <key-path>...
+Example (personal KnittStyler settings from a user's NTUSER.DAT):
+  hive-to-reg.py NTUSER.DAT HKEY_CURRENT_USER bundle/config/knittstyler-user.reg \
+      'Software\TRIAN Solutions' 'Software\Borland\Locales'
+Requires regipy: pip install regipy
 """
 import sys
 from regipy.registry import RegistryHive

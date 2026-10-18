@@ -22,11 +22,12 @@ Reports from other machines and Ubuntu versions are welcome in the issues.
 
 ## Requirements
 
-- Ubuntu or Debian, x86-64, with Wine able to run 32-bit programs:
+- Ubuntu or Debian, x86-64, with Wine able to run 32-bit programs, plus `git` to get the scripts and `wget` to download wine-gecko on first start:
   ```
   sudo dpkg --add-architecture i386 && sudo apt update
-  sudo apt install wine wine32:i386
+  sudo apt install wine wine32:i386 git wget
   ```
+  Wine pulls in its sound and USB libraries itself. Keep apt's recommended packages (the default): `libcups2:i386`, which Wine needs to see printers, comes in only as a recommendation of `wine32`.
 - Access to serial ports for your user (log out and back in afterwards):
   ```
   sudo usermod -aG dialout $USER
@@ -35,7 +36,13 @@ Reports from other machines and Ubuntu versions are welcome in the issues.
   ```
   sudo apt purge brltty modemmanager
   ```
-- Optional: `printer-driver-cups-pdf` (a PDF printer, see [Known issues](#known-issues)) and `icoutils` (program icon in the menu).
+- Optional, nothing breaks without them:
+  - `printer-driver-cups-pdf`: a PDF printer (see [Known issues](#known-issues));
+  - `zenity`: message windows when KnittStyler is started from the menu (present on Ubuntu with GNOME);
+  - `cups-client`: lets the launcher warn when no printer is set up;
+  - `icoutils` and `desktop-file-utils`: program icon and menu refresh for `install-desktop.sh`;
+  - `fonts-noto-cjk`: only for the Japanese interface.
+- Helper scripts only: `scripts/extract-from-vm.sh` needs `virtualbox` and `ntfs-3g`; `scripts/hive-to-reg.py` needs `regipy` (`pip install regipy`).
 
 ## Installation
 
